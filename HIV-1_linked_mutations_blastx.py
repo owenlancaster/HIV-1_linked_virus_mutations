@@ -242,7 +242,9 @@ def main():
 				# print "AFTER NOTDEFINED -> " + str(linked_mutations_string)
 				# if str(linked_mutations_list_sorted) == "[]":
 					# print "NOTDEFINED -> " + region_key + "\t" + str(region_count) + "\t -----> " + str(linked_mutations_list_sorted) + " ---> " + str(linked_mutations[region_key])
-				linked_list_out.write("LINKED" + "\t" + region_key + "\t" + str(region_count) + "\t" + str(linked_mutations_list_sorted) + " -> without sorting -> " +  linked_mutations_string + " ------> " + str(linked_mutations[region_key]) + "\n")
+				# linked_list_out.write("LINKED" + "\t" + region_key + "\t" + str(region_count) + "\t" + str(linked_mutations_list_sorted) + " -> without sorting -> " +  linked_mutations_string + " ------> " + str(linked_mutations[region_key]) + "\n")
+				linked_list_out.write("LINKED" + "\t" + region_key + "\t" + str(region_count) + "\t" + str(linked_mutations_list_sorted) + "\n")
+				# linked_list_out.write("LINKED" + "\t" + region_key + "\t" + str(region_count) + "\t" + str(linked_mutations_list_sorted) + " -> without sorting -> " +  linked_mutations_string + " ------> " + str(linked_mutations[region_key]) + "\n")
 				# print "TESTLINKED" + "\t" + region_key + "\t" + str(region_count) + "\t -----> " + str(linked_mutations_list_sorted)
 
 				tmp_split = region_key.split("\t")
