@@ -7,10 +7,10 @@ poretools fasta DIRECTORY_FOR_FAST5 > SAMPLE_NAME.fasta
 ---
 #### Run linked mutation python script to count/calculate the total number/frequency of mutations for each virus particle for the sample:
 
-##### Example to run linked mutation script on fasta file, BLASTx will be initially run on this be first of all run. Specifying -l enables calculating linked mutations on each BLAST hit (as well as overall single mutation counts) 
+##### Example to run linked mutation script on fasta file, BLASTx will be initially run on this be first of all run. Specifying -l enables calculating linked mutations on each BLAST hit (as well as overall single mutation counts). The -c option allows the number of linked mutations to report (1 means that all linked mutations, even those with just one a strand will be outputted)
 
 ```
-python HIV-1_linked_mutations_blastx.py -f reads.fasta -e 0.01 -l
+python HIV-1_linked_mutations_blastx.py -f reads.fasta -e 0.01 -l -c 1
 ```
 
 ##### N.B. this step requires NCBI BLAST+ to be installed, and uses the "all" database (included in this respository) which is a HIV-1 RT/PR/INT pre-formatted protein BLAST database created from the Stanford HIV-1 subtype B protein sequences. The output format from the search in BLAST xml format (outfmt 5) which is then used in the script

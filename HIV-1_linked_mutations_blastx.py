@@ -12,7 +12,7 @@ parser.add_argument('-x', '--xml', help='BLASTx XML output file')
 # parser.add_argument('-f', '--fasta', help='fasta file input', required=True)
 parser.add_argument('-e', '--evalue', help='E value cut off to filter out hits above this threshold')
 parser.add_argument('-l', '--linked', action='store_true', help='flag to set whether linked output')
-parser.add_argument('-c', '--linkedcount', type=int, help='If linked output is enabled then only report strands with more than this number of linked mutations')
+parser.add_argument('-c', '--linkedcount', type=int, help='If linked output is enabled then only reads strands with this number of linked mutations or more will be outputted')
 parser.add_argument('-u', '--unk', action='store_true', help='flag to set whether unknown mutations are outputted')
 parser.add_argument('-p', '--pi', help='Protease mutation dictionary file, defaults to included file (PI_mutations.txt) if not specified', default="PI_mutations.txt")
 parser.add_argument('-n', '--nrti', help='NRTI mutation dictionary file, defaults to included file (NRTI_mutations.txt) if not specified', default="NRTI_mutations.txt")
@@ -20,10 +20,7 @@ parser.add_argument('-nn', '--nnrti', help='NNRTI mutation dictionary file, defa
 
 args = parser.parse_args()
 
-#TODO: Check that the major/minor mutations in the input dictionaries are correct
 #TODO: Include a paired end mode (or do in separate script after) that will combine mutations and counts for paired reads. Best way to do this would probably be to parse the BLASTx xml and store all the hits in a dictionary for each read then loop through the dictionary and find the matching pair and count this as the same hit
-#TODO: check that the file format of the mutation dictionaries is correct - throw an error if not (i.e. correct number of fields and no empty lines)
-
 
 def main():
 	"""Main function"""
@@ -110,9 +107,11 @@ def main():
 		linked_counts_out = open(base_filename + "_linked_counts.txt",'w')
 
 	# Set the default of the number of linked mutations to greater than 1 if it's not been set in the options
-	if args.linkedcount is None:
-		args.linkedcount = 1
-	linkedcount = args.linkedcount
+	if args.linked is True:
+		if args.linkedcount is None:
+			args.linkedcount = 1
+		linkedcount = args.linkedcount
+		print "Linked mode enable so will output linked mutations with a count of", linkedcount, "or more"
 
 	### Initialise all the defaultdict for storing counts of mutations
 	pr_counts = defaultdict(int)
@@ -202,11 +201,11 @@ def main():
 										mutation_count[query_name + "\t" + "NNRTI_" + nnrti_mutations[mutation_string]] += 1
 										linked_mutations[query_name + "\t" + "NNRTI_" + nnrti_mutations[mutation_string]].append(mutation_string)
 										rt_counts[str(subject_position) + "\t" + mutation_string] += 1
-									else: # Mutation is not listed in either dictionary for RT region so it's a other mutation
-										# print "RT_OTHER -> ", mutation_string
-										mutation_count[query_name + "\t" + "RT_UNK"] += 1
-										linked_mutations[query_name + "\t" + "RT_UNK"].append(mutation_string)
-										rt_counts_unk[str(subject_position) + "\t" + mutation_string] += 1
+									else: # Mutation is not listed in either dictionary for RT region so it's an unknown mutation
+										if args.unk is True:
+											mutation_count[query_name + "\t" + "RT_UNK"] += 1
+											linked_mutations[query_name + "\t" + "RT_UNK"].append(mutation_string)
+											rt_counts_unk[str(subject_position) + "\t" + mutation_string] += 1
 
 								if re.match('pr.*', region_title) is not None:
 									pr_counts_total[subject_position] += 1
@@ -219,17 +218,18 @@ def main():
 											# print "NOTDEFINED - *********--> " + mutation_string
 										pr_counts[str(subject_position) + "\t" + mutation_string] += 1
 									else:
-										# print "PR_UNK -> ", mutation_string
-										mutation_count[query_name + "\t" + "PR_UNK"] += 1
-										linked_mutations[query_name + "\t" + "PR_UNK"].append(mutation_string)
-										pr_counts_unk[str(subject_position) + "\t" + mutation_string] += 1
+										if args.unk is True:
+											# print "PR_UNK -> ", mutation_string
+											mutation_count[query_name + "\t" + "PR_UNK"] += 1
+											linked_mutations[query_name + "\t" + "PR_UNK"].append(mutation_string)
+											pr_counts_unk[str(subject_position) + "\t" + mutation_string] += 1
 							c += 1
 							subject_position += 1
 
 	# print "Finished parsing BLASTx records..."
 	if args.linked is True:
 		for region_key, region_count in mutation_count.iteritems(): # Iterate through the mutation count for this hit and also print the defaultdict value for the array of mutations
-			if region_count > linkedcount: # Only print where there's more than one mutation
+			if region_count >= linkedcount: # Only print where there's more than one mutation
 				# print "count -> ", region_count, " region_key -> ", region_key
 				# linked_mutations_list_sorted = linked_mutations[region_key]
 				# linked_mutations_list_sorted.sort(key=natural_keys)
@@ -242,7 +242,8 @@ def main():
 				# print "AFTER NOTDEFINED -> " + str(linked_mutations_string)
 				# if str(linked_mutations_list_sorted) == "[]":
 					# print "NOTDEFINED -> " + region_key + "\t" + str(region_count) + "\t -----> " + str(linked_mutations_list_sorted) + " ---> " + str(linked_mutations[region_key])
-				linked_list_out.write("LINKED" + "\t" + region_key + "\t" + str(region_count) + "\t" + str(linked_mutations_list_sorted) + " -> without sorting -> " +  linked_mutations_string + " ------> " + str(linked_mutations[region_key]) + "\n")
+				# linked_list_out.write("LINKED" + "\t" + region_key + "\t" + str(region_count) + "\t" + str(linked_mutations_list_sorted) + " -> without sorting -> " +  linked_mutations_string + " ------> " + str(linked_mutations[region_key]) + "\n")
+				linked_list_out.write(region_key + "\t" + str(region_count) + "\t" + str(linked_mutations_list_sorted) + "\n")
 				# print "TESTLINKED" + "\t" + region_key + "\t" + str(region_count) + "\t -----> " + str(linked_mutations_list_sorted)
 
 				tmp_split = region_key.split("\t")
@@ -295,12 +296,10 @@ def main():
 			individual_counts_out.write(rt_key + "\t" + str(rt_count) + "\t" + str(total) + "\t" + format(percentage, ".2f") + "\t" + "RT_count_unk" + "\n")
 
 
-######### CURRENTLY NEED TO REDO THIS BIT
-	# Loop through the linked mutation counts
+	# Loop through the linked mutation counts and output to final file
 	if args.linked is True:
 		for key, count in sorted(linked_mutation_counts.iteritems(), key=lambda (k,v): (v,k)):
-			# print "linked counts ----> " + key + "\t" + str(count) + "\t" + "LINKED_MUTATION_COUNT"
-			linked_counts_out.write(key + "\t" + str(count) + "\t" + "LINKED_MUTATION_COUNT" + "\n")
+			linked_counts_out.write(key + "\t" + str(count) + "\n")
 ######### CURRENTLY NEED TO REDO THIS BIT
 
 
