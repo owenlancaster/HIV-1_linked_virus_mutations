@@ -10,9 +10,9 @@ parser = argparse.ArgumentParser(description='Take blastx output and detects lin
 parser.add_argument('-f', '--fasta', help='FASTA file containing raw reads') #, required=True
 parser.add_argument('-x', '--xml', help='BLASTx XML output file')
 # parser.add_argument('-f', '--fasta', help='fasta file input', required=True)
-parser.add_argument('-e', '--evalue', help='E value cut off to filter out hits above this threshold')
+parser.add_argument('-e', '--evalue', help='E value cut off to filter out hits above this threshold', default=0.01)
 parser.add_argument('-l', '--linked', action='store_true', help='flag to set whether linked output')
-parser.add_argument('-c', '--linkedcount', type=int, help='If linked output is enabled then only reads strands with this number of linked mutations or more will be outputted')
+parser.add_argument('-c', '--linkedcount', type=int, help='If linked output is enabled then only reads strands with this number of linked mutations or more will be outputted', default=1)
 parser.add_argument('-u', '--unk', action='store_true', help='flag to set whether unknown mutations are outputted')
 parser.add_argument('-p', '--pi', help='Protease mutation dictionary file, defaults to included file (PI_mutations.txt) if not specified', default="PI_mutations.txt")
 parser.add_argument('-n', '--nrti', help='NRTI mutation dictionary file, defaults to included file (NRTI_mutations.txt) if not specified', default="NRTI_mutations.txt")
@@ -74,8 +74,6 @@ def main():
 			# nnrti_mutations[mutation] = ""
 			nnrti_mutations[mutation] = CLASS
 
-
-
 	### Run BLASTx on the fasta file
 	# TODO: need to check for blastx executable and throw error if not installed.
 	if args.fasta is not None and args.xml is not None:
@@ -106,12 +104,8 @@ def main():
 		linked_list_out = open(base_filename + "_linked_list.txt",'w')
 		linked_counts_out = open(base_filename + "_linked_counts.txt",'w')
 
-	# Set the default of the number of linked mutations to greater than 1 if it's not been set in the options
-	if args.linked is True:
-		if args.linkedcount is None:
-			args.linkedcount = 1
-		linkedcount = args.linkedcount
-		print "Linked mode enable so will output linked mutations with a count of", linkedcount, "or more"
+	linkedcount = args.linkedcount
+	print "Linked mode enable so will output linked mutations with a count of", linkedcount, "or more"
 
 	### Initialise all the defaultdict for storing counts of mutations
 	pr_counts = defaultdict(int)
@@ -128,11 +122,14 @@ def main():
 
 	mutation_count = defaultdict(int)
 
+	### Initialise counts
+	total_overall_mutation_count = 0
+	pr_all_count_total = 0
+	rt_all_count_total = 0
+
 	record_number = 0
 
-	# Set the default of the evalue to 0.01 if it's not set with parameters when the script is run, TODO: just use the argsparser to set this default instead
-	if args.evalue is None:
-		args.evalue = 0.01
+	# Store the evalue cutoff setting from input arguments
 	evalue = args.evalue
 
 	linked_mutations = defaultdict(list) # Declare the linked mutation dictionary
@@ -186,10 +183,12 @@ def main():
 						for char in hsp.match: # Loop through each hsp (should only be the top one since this is set in the initial blastx search done in the script)
 							# print c, char, "->", subject_position
 							if char == " " or not char.isalpha(): # char == "+" # There's a mismatch between query and subject for this AA so it's a mutation
-								mutation_string = str(subject[c]) + str(subject_position) + str(query[c]) # Create the mutation string 
+								mutation_string = str(subject[c]) + str(subject_position) + str(query[c]) # Create the mutation string
+								total_overall_mutation_count += 1 # Increment the total count of mutations
 								# print mutation_string
 								if re.match('rt.*', region_title) is not None: # This hit is a match to the rt region
 									rt_counts_total[subject_position] += 1
+									rt_all_count_total += 1
 									if mutation_string in nrti_mutations: # Check if this mutation is listed in the NRTI dictionary of mutations for this region
 										# print "NRTI -> ", mutation_string, " ---> ", nrti_mutations[mutation_string], " ---> ", query_name
 										mutation_count[query_name + "\t" + "NRTI_" + nrti_mutations[mutation_string]] += 1 # Increment the mutation count for this sequence hit to find linked mutations
@@ -209,6 +208,7 @@ def main():
 
 								if re.match('pr.*', region_title) is not None:
 									pr_counts_total[subject_position] += 1
+									pr_all_count_total += 1
 									if mutation_string in pi_mutations: # Check if this mutation is listed in the dictionary of mutations for this region
 										# print "PR -> ", mutation_string
 										mutation_count[query_name + "\t" + "PR_" + pi_mutations[mutation_string]] += 1
@@ -262,9 +262,11 @@ def main():
 		tmp_split = pr_key.split("\t") # split key on tabs
 		position = tmp_split[0] # get the amino acid position
 		total = pr_counts_total[int(position)] # find the total number of mutations for this amino acid position
-		percentage = (float(pr_count) / float(total) ) * 100 # calculate the percentage frequency of this mutation at this position
+		# percentage = (float(pr_count) / float(total) ) * 100 # calculate the percentage frequency of this mutation at this position
+		percentage = (float(pr_count) / pr_all_count_total ) * 100 # calculate the percentage frequency of this mutation at this position
 		# print pr_key + "\t" + str(pr_count) + "\t" + str(total) + "\t" + format(percentage, ".2f") + "\t" + "PR_count"
-		individual_counts_out.write(pr_key + "\t" + str(pr_count) + "\t" + str(total) + "\t" + format(percentage, ".2f") + "\t" + "PR_count" + "\n")
+		# individual_counts_out.write(pr_key + "\t" + str(pr_count) + "\t" + str(total) + "\t" + format(percentage, ".2f") + "\t" + "PR_count" + "\n")
+		individual_counts_out.write(pr_key + "\t" + str(pr_count) + "\t" + str(pr_all_count_total) + "\t" + format(percentage, ".2f") + "\t" + "PR_count" + "\n")
 
 	if args.unk is True:
 		# print "PR other occurence counts:"
@@ -273,9 +275,11 @@ def main():
 			tmp_split = pr_key.split("\t")
 			position = tmp_split[0]
 			total = pr_counts_total[int(position)]
-			percentage = (float(pr_count) / float(total) ) * 100
+			# percentage = (float(pr_count) / float(total) ) * 100
+			percentage = (float(pr_count) / pr_all_count_total ) * 100
 			# print pr_key + "\t" + str(pr_count) + "\t" + str(total) + "\t" + format(percentage, ".2f") + "\t" + "PR_count_other"
-			individual_counts_out.write(pr_key + "\t" + str(pr_count) + "\t" + str(total) + "\t" + format(percentage, ".2f") + "\t" + "PR_count_unk" + "\n")
+			# individual_counts_out.write(pr_key + "\t" + str(pr_count) + "\t" + str(total) + "\t" + format(percentage, ".2f") + "\t" + "PR_count_unk" + "\n")
+			individual_counts_out.write(pr_key + "\t" + str(pr_count) + "\t" + str(pr_all_count_total) + "\t" + format(percentage, ".2f") + "\t" + "PR_count_unk" + "\n")
 
 	# print "RT occurence counts:"
 	for rt_key, rt_count in sorted(rt_counts.iteritems(), key=lambda (k,v): (v,k)):
@@ -283,9 +287,11 @@ def main():
 		tmp_split = rt_key.split("\t")
 		position = tmp_split[0]
 		total = rt_counts_total[int(position)]
-		percentage = (float(rt_count) / float(total) ) * 100
+		# percentage = (float(rt_count) / float(total) ) * 100
+		percentage = (float(rt_count) / rt_all_count_total ) * 100
 		# print rt_key + "\t" + str(rt_count) + "\t" + str(total) + "\t" + format(percentage, ".2f") + "\t" + "RT_count"
-		individual_counts_out.write(rt_key + "\t" + str(rt_count) + "\t" + str(total) + "\t" + format(percentage, ".2f") + "\t" + "RT_count" + "\n")
+		# individual_counts_out.write(rt_key + "\t" + str(rt_count) + "\t" + str(total) + "\t" + format(percentage, ".2f") + "\t" + "RT_count" + "\n")
+		individual_counts_out.write(rt_key + "\t" + str(rt_count) + "\t" + str(rt_all_count_total) + "\t" + format(percentage, ".2f") + "\t" + "RT_count" + "\n")
 
 	if args.unk is True:
 		# print "RT other occurence counts:"
@@ -294,17 +300,17 @@ def main():
 			tmp_split = rt_key.split("\t")
 			position = tmp_split[0]
 			total = rt_counts_total[int(position)]
-			percentage = (float(rt_count) / float(total) ) * 100
+			# percentage = (float(rt_count) / float(total) ) * 100
+			percentage = (float(rt_count) / rt_all_count_total ) * 100
 			# print rt_key + "\t" + str(rt_count) + "\t" + str(total) + "\t" + format(percentage, ".2f") + "\t" + "RT_count_other"
-			individual_counts_out.write(rt_key + "\t" + str(rt_count) + "\t" + str(total) + "\t" + format(percentage, ".2f") + "\t" + "RT_count_unk" + "\n")
+			# individual_counts_out.write(rt_key + "\t" + str(rt_count) + "\t" + str(total) + "\t" + format(percentage, ".2f") + "\t" + "RT_count_unk" + "\n")
+			individual_counts_out.write(rt_key + "\t" + str(rt_count) + "\t" + str(rt_all_count_total) + "\t" + format(percentage, ".2f") + "\t" + "RT_count_unk" + "\n")
 
 
 	# Loop through the linked mutation counts and output to final file
 	if args.linked is True:
 		for key, count in sorted(linked_mutation_counts.iteritems(), key=lambda (k,v): (v,k)):
 			linked_counts_out.write(key + "\t" + str(count) + "\n")
-######### CURRENTLY NEED TO REDO THIS BIT
-
 
 def natural_key(string_):
     """See http://www.codinghorror.com/blog/archives/001018.html"""
